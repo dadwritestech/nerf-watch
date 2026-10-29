@@ -1,0 +1,48 @@
+# Daily canary run. Nothing here is enabled until the repo is pushed AND keys are added as
+# repository secrets. Targets whose key secret is missing are skipped, never faked.
+name: daily nerf-watch
+
+on:
+  schedule:
+    - cron: "17 6 * * *"     # 06:17 UTC daily
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: "Repeats per target"
+        default: "3"
+
+permissions:
+  contents: write            # commit data/ and site/ back to the repo
+
+concurrency:
+  group: nerf-watch-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Run suite against every target with a key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m nerfwatch run --reps "${{ github.event.inputs.reps || '3' }}"
+      - name: Status + dashboard
+        run: |
+          python -m nerfwatch status | tee status.txt
+          python -m nerfwatch build
+      - name: Commit results
+        run: |
+          git config user.name "nerf-watch bot"
+          git config user.email "nerf-watch-bot@users.noreply.github.com"
+          git add data site
+          git diff --cached --quiet || git commit -m "data: daily run $(date -u +%F)"
+          git push
