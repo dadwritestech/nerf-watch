@@ -118,6 +118,16 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(stats.verdict(c), "shifted")
 
 
+class PowerTest(unittest.TestCase):
+    def test_power_monotone_and_no_false_flags(self):
+        runs = [fake_run([1] * 36 + [0] * 10, rid=f"b{i}") for i in range(6)]
+        pw = analyze.power(runs, ks=(1, 3, 6), trials=30)
+        self.assertEqual(pw[0], 0.0)
+        self.assertLessEqual(pw[1], pw[3])
+        self.assertLessEqual(pw[3], pw[6])
+        self.assertEqual(pw[6], 1.0)
+
+
 class FakeOpenAI(http.server.BaseHTTPRequestHandler):
     """Answers each suite prompt with its reference answer; `degrade` corrupts code items."""
     degrade = False

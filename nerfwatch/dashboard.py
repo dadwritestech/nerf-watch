@@ -82,7 +82,7 @@ document.getElementById('tiles').innerHTML = series.map(s=>{
   return `<div class="tile"><div class="name"><span class="sw" style="background:var(${s.color})"></span>${esc(s.key)}</div>
   <div class="big">${fmt(p.summary.score)}</div>
   <span class="badge"><i style="background:var(${v[0]})"></i>${p.verdict==="worse"?"▼ ":p.verdict==="better"?"▲ ":""}${v[1]}</span>
-  <div class="meta" style="margin-top:6px">latest run Δ ${c?(c.delta>=0?"+":"")+(c.delta*100).toFixed(1)+" pts":"–"} · p = ${c?c.p:"–"} · ${s.points.length} runs · noise SD ${fmt(s.noise.score_sd)}</div></div>`;}).join("");
+  <div class="meta" style="margin-top:6px">latest run Δ ${c?(c.delta>=0?"+":"")+(c.delta*100).toFixed(1)+" pts":"–"} · p = ${c?Number(c.p).toPrecision(2):"–"} · ${s.points.length} runs · noise SD ${fmt(s.noise.score_sd)}</div></div>`;}).join("");
 document.getElementById('legend').innerHTML = series.map(s=>`<span><span class="sw" style="background:var(${s.color})"></span>${esc(s.key)}</span>`).join("");
 
 function chart(id, get, opts){
@@ -92,10 +92,12 @@ function chart(id, get, opts){
   if(!all.length){svg.innerHTML=`<text x="10" y="20">no data</text>`;return;}
   const t0=Math.min(...all.map(d=>d.t)), t1=Math.max(...all.map(d=>d.t))||t0+1;
   let y0=opts.min??Math.min(...all.map(d=>d.y)), y1=opts.max??Math.max(...all.map(d=>d.y));
-  if(opts.pad){const pd=(y1-y0||1)*.15;y0=Math.max(0,y0-pd);y1=y1+pd;}
+  // pad to at least ±20% of the level, so wobble below the 15% flag threshold looks small
+  if(opts.pad){const pd=Math.max((y1-y0)*.15,(y0+y1)/2*.2,1);y0=Math.max(0,y0-pd);y1=y1+pd;}
+  const dec=opts.pct?0:((y1-y0)/4<2?1:0);
   const X=t=>m.l+(t1===t0?0.5:(t-t0)/(t1-t0))*(W-m.l-m.r), Y=y=>H-m.b-(y-y0)/(y1-y0||1)*(H-m.t-m.b);
   let g="";
-  for(let k=0;k<=4;k++){const v=y0+(y1-y0)*k/4;g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${m.l-6}" y="${Y(v)+4}" text-anchor="end">${opts.pct?Math.round(v*100)+"%":Math.round(v)}</text>`;}
+  for(let k=0;k<=4;k++){const v=y0+(y1-y0)*k/4;g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${m.l-6}" y="${Y(v)+4}" text-anchor="end">${opts.pct?Math.round(v*100)+"%":v.toFixed(dec)}</text>`;}
   const days=[...new Set(all.map(d=>new Date(d.t).toISOString().slice(0,10)))];
   const tl=[t0,(t0+t1)/2,t1];
   tl.forEach((t,i)=>{const d=new Date(t);const lab=days.length>1?d.toISOString().slice(5,10):d.toISOString().slice(11,16)+"Z";g+=`<text x="${X(t)}" y="${H-8}" text-anchor="${i==0?"start":i==2?"end":"middle"}">${lab}</text>`;});
@@ -125,9 +127,9 @@ chart("c-instruct",p=>p.summary.instruct,{pct:true,min:0,max:1,label:"instructio
 chart("c-tokens",p=>p.summary.median_tokens,{pad:true,label:"median tokens"});};
 draw(); addEventListener("resize",draw);
 
-document.getElementById('noise').innerHTML = `<tr><th>Model</th><th>Runs</th><th>Mean pass</th><th>Run-to-run SD</th><th>Min–max</th><th>Items that flap</th><th>Median tokens range</th><th>False flags among baseline runs</th></tr>`+
+document.getElementById('noise').innerHTML = `<tr><th>Model</th><th>Runs</th><th>Mean pass</th><th>Run-to-run SD</th><th>Min–max</th><th>Items that flap</th><th>Median tokens range</th><th>False flags among baseline runs</th><th>Catches a silent break of</th></tr>`+
  series.map(s=>{const n=s.noise, b=s.points.filter(p=>p.role==="baseline"), ff=b.filter(p=>p.verdict!=="same").length;
- return `<tr><td><span class="sw" style="display:inline-block;background:var(${s.color})"></span> ${esc(s.key)}</td><td>${n.runs}</td><td>${fmt(n.score_mean)}</td><td>${fmt(n.score_sd)}</td><td>${fmt(n.score_min)} – ${fmt(n.score_max)}</td><td>${n.flapping_items.length} <span style="color:var(--text-muted)">${esc(n.flapping_items.join(", "))}</span></td><td>${n.median_tokens_range?n.median_tokens_range.join(" – "):"–"}</td><td>${ff} / ${b.length}</td></tr>`;}).join("");
+ return `<tr><td><span class="sw" style="display:inline-block;background:var(${s.color})"></span> ${esc(s.key)}</td><td>${n.runs}</td><td>${fmt(n.score_mean)}</td><td>${fmt(n.score_sd)}</td><td>${fmt(n.score_min)} – ${fmt(n.score_max)}</td><td>${n.flapping_items.length} <span style="color:var(--text-muted)">${esc(n.flapping_items.join(", "))}</span></td><td>${n.median_tokens_range?n.median_tokens_range.join(" – "):"–"}</td><td>${ff} / ${b.length}</td><td>${(()=>{const pw=n.power;if(!pw)return "–";const k=Object.keys(pw).map(Number).filter(k=>k>0&&pw[k]>=0.8).sort((a,b)=>a-b)[0];return k?`≥${k} items (${Math.round(pw[k]*100)}% of trials)`:"–";})()}</td></tr>`;}).join("");
 
 document.getElementById('drills').innerHTML = R.drills.length? `<tr><th>Drill</th><th>vs</th><th>Injected system prompt</th><th>Pass rate</th><th>Δ vs baseline</th><th>p</th><th>Tokens ×</th><th>Verdict</th></tr>`+
  R.drills.flatMap(d=>d.runs.map(r=>{const v=VERDICT[r.verdict]||VERDICT["n/a"];return `<tr><td>${esc(d.target)}</td><td>${esc(d.parent)} · T=${d.temperature}</td><td style="max-width:320px">${esc(d.system_prompt)}</td><td>${fmt(r.summary.score)}</td><td>${(r.cmp.score.delta*100).toFixed(1)} pts</td><td>${r.cmp.score.p}</td><td>${r.cmp.tokens.ratio}</td><td><span class="badge"><i style="background:var(${v[0]})"></i>${v[1]}</span></td></tr>`;})).join("") : `<tr><td>No drills run yet.</td></tr>`;

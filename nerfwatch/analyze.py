@@ -61,8 +61,11 @@ def build_report(runs, baseline_n=BASELINE_RUNS):
     clean = {k: v for k, v in groups.items() if not v[0].get("drill")}
     for (name, sv, temp), rs in sorted(clean.items()):
         tl = timeline(rs, baseline_n)
+        noise = noise_report(rs)
+        if len(rs) >= 3:
+            noise["power"] = power(rs)
         targets.append({"target": name, "model": rs[0]["model"], "suite_version": sv,
-                        "temperature": temp, "points": tl, "noise": noise_report(rs),
+                        "temperature": temp, "points": tl, "noise": noise,
                         "latest": tl[-1]["verdict"] if tl else "n/a"})
     # Drills: an injected degradation compared against the clean target's baseline.
     for (name, sv, temp), rs in sorted(groups.items()):
@@ -81,3 +84,30 @@ def build_report(runs, baseline_n=BASELINE_RUNS):
                        "temperature": temp, "runs": per_run})
     return {"targets": targets, "drills": drills, "skipped_runs": skipped, "alpha": stats.ALPHA,
             "min_effect": stats.MIN_EFFECT, "baseline_n": baseline_n}
+
+
+def power(target_runs, ks=(1, 2, 3, 4, 5, 6, 8), trials=200, seed=11):
+    """Detection power measured on real runs, without the model: hold one real run out,
+    flip k of its passing items to failing, and test it against the remaining runs.
+    k=0 is the false-positive rate on unmodified held-out runs."""
+    import copy
+    import random
+    rng = random.Random(seed)
+    out = {}
+    for k in (0,) + tuple(ks):
+        flagged = n = 0
+        for t in range(trials):
+            i = t % len(target_runs)
+            held = copy.deepcopy(target_runs[i])
+            base = target_runs[:i] + target_runs[i + 1:]
+            passing = [it for it in held["items"] if it.get("pass") and not it.get("error")]
+            if k > len(passing):
+                continue
+            for it in rng.sample(passing, k):
+                it["pass"] = 0
+            flagged += stats.binary_test(base, [held])["changed"]
+            n += 1
+            if k == 0 and t >= len(target_runs) - 1:
+                break           # k=0 is deterministic: one pass over the runs is enough
+        out[k] = round(flagged / n, 3) if n else None
+    return out

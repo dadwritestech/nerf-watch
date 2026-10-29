@@ -33,6 +33,7 @@ def main(argv=None):
     d.add_argument("--reps", type=int, default=1)
     d.add_argument("--temperature", type=float, default=0.0)
     sub.add_parser("status")
+    sub.add_parser("noise", help="run-to-run noise + detection power per target")
     b = sub.add_parser("build")
     b.add_argument("--out", default=os.path.join(ROOT, "site", "index.html"))
     a = ap.parse_args(argv)
@@ -78,6 +79,16 @@ def main(argv=None):
                 c = r["cmp"]["score"]
                 print(f"[drill] {d['target']:<32} vs {d['parent']}: {r['verdict']} "
                       f"delta={c['delta']} p={c['p']}")
+        return 0
+    if a.cmd == "noise":
+        groups = analyze.group([r for r in runner.load_runs(a.data) if analyze.valid(r)])
+        for (name, sv, temp), rs in sorted(groups.items()):
+            if rs[0].get("drill") or len(rs) < 3:
+                continue
+            n = analyze.noise_report(rs)
+            print(f"{name} T={temp}: {json.dumps(n)}")
+            print("  detection rate when k items silently break (k: rate):",
+                  json.dumps(analyze.power(rs)))
         return 0
     if a.cmd == "build":
         dashboard.build(rep, a.out)
