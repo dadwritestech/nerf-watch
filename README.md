@@ -109,3 +109,8 @@ python -m unittest discover -s tests
 - 46 items can't see a 1-item regression. That's by design (see the power table) and can be traded for more items or more runs.
 - Ministral fails 11 items in every run, and gemma-4-12b passed all 42 items of the earlier 42-item draft in a calibration run. The 4 harder items were added for headroom, but strong models will sit near the ceiling, where improvements are invisible and only drops show. For a nerf detector that's the right direction.
 - Latency on a shared host is mostly noise about the host.
+
+## License
+
+- **Code:** [Apache-2.0](LICENSE).
+- **Data** (`data/`, `site/`): [CC BY 4.0](DATA_LICENSE).
